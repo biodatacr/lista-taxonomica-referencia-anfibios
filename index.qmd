@@ -1,0 +1,331 @@
+---
+title: "Lista taxonómica de referencia de anfibios de Costa Rica"
+bibliography: bib/referencias.bib
+csl: bib/apa-6th-edition.csl
+theme: litera
+format:
+  html:
+    toc: true
+    toc_float: true
+    toc-title: "Contenidos"
+---
+
+
+```{r}
+#| label: packages-load
+#| echo: false
+#| message: false
+
+library(readr)
+library(forcats)
+library(dplyr)
+library(DT)
+library(ggplot2)
+library(plotly)
+library(sf)
+library(leaflet)
+```
+
+```{r}
+#| label: constants
+#| echo: false
+
+CHECKLIST <- "data/processed/lista-taxonomica-referencia-anfibios.csv"
+OCCURRENCES_CHECKLIST <- "data/processed/registros-presencia-lista-taxonomica-referencia-anfibios-gbif.csv"
+OCCURRENCES_AMPHIBIANS <- "data/processed/registros-presencia-anfibios-gbif.csv"
+```
+
+```{r}
+#| label: data-load
+#| echo: false
+#| message: false
+
+checklist <- read_delim(CHECKLIST)
+
+occurrences_checklist <-
+  st_read(
+    OCCURRENCES_CHECKLIST,
+    options = c(
+      "X_POSSIBLE_NAMES=decimalLongitude",
+      "Y_POSSIBLE_NAMES=decimalLatitude"
+    ),
+    quiet = TRUE
+  )
+
+occurrences_amphibians <-
+  st_read(
+    OCCURRENCES_AMPHIBIANS,
+    options = c(
+      "X_POSSIBLE_NAMES=decimalLongitude",
+      "Y_POSSIBLE_NAMES=decimalLatitude"
+    ),
+    quiet = TRUE
+  )
+
+checklist_n <- nrow(checklist)
+```
+
+
+# Introducción
+La **lista taxonómica de referencia de anfibios (clase _Amphibia_) de Costa Rica** de [BIODATACR](http://biodiversidad.go.cr/) permite integrar datos de diferentes publicadores en el sistema e implementar controles de calidad en la ortografía de los nombres científicos, su sinonimia, sus autores y su clasificación, entre otros aspectos.
+
+La siguiente tabla muestra las **`r checklist_n` especies** de la lista. La columna `Estado` indica si el nombre científico es aceptado o un sinónimo. Con los controles de la tabla, puede modificar la cantidad de especies desplegadas, ordenar los datos y realizar búsquedas. 
+
+```{r}
+#| label: checklist-table
+#| echo: false
+
+checklist |>
+  select(order, family, scientificName, status) |>
+  arrange(order, family, scientificName) |>
+  datatable(
+    colnames = c("Orden", "Familia", "Nombre científico", "Estado"),
+    options = list(
+      pageLength = 5,
+      language = list(url = '//cdn.datatables.net/plug-ins/1.10.11/i18n/Spanish.json')
+    ),
+    rownames= FALSE
+  )
+```
+
+La lista está disponible para descarga en formato de valores separados por comas (CSV) en:  
+[lista taxonómica de referencia de anfibios de Costa Rica](data/processed/lista-taxonomica-referencia-anfibios.csv)
+
+El repositorio con los datos y el código fuente de los programas está en la dirección:  
+[https://github.com/biodatacr/lista-taxonomica-referencia-anfibios](https://github.com/biodatacr/lista-taxonomica-referencia-anfibios)
+
+En el resto de este documento, se describe el proceso de elaboración de la lista y se presentan algunas visualizaciones de los datos que contiene.
+
+# Elaboración de la lista
+El proceso inició con una lista proporcionada por un grupo de expertos en anfibios de Costa Rica, cuya estructura y formato se refinaron progresivamente para que los nombres científicos pudieran ser verificados en la [Infraestructura Mundial de Información en Biodiversidad (GBIF)](https://www.gbif.org/), una organización dedicada a la integración de datos de biológicos de todo el mundo y, específicamente, en su [lista taxonómica de referencia o *Backbone Taxonomy*](https://www.gbif.org/dataset/d7dddbf4-2cf0-4f39-9b2a-bb099caae36c). Esta lista de GBIF se construye a partir del [Catálogo de la Vida (COL)](https://www.catalogueoflife.org/) y se completa con cerca de 100 fuentes adicionales de datos. Es actualizada periódicamente por medio de un proceso automático.
+
+La verificación de los nombres científicos en la lista de GBIF se llevó a cabo mediante un programa en el lenguaje [R](https://www.r-project.org/) y su paquete [rgbif](https://cran.r-project.org/web/packages/rgbif/), el cual proporciona acceso a los servicios web que componen la [interfaz de programación de aplicaciones (API) de GBIF](https://www.gbif.org/developer/summary). Como resultado de esta verificación, se detectaron errores ortográficos, sinónimos, y se obtuvieron elementos adicionales de datos, como autores y niveles taxonómicos superiores, entre otros.
+
+Seguidamente, se describen en detalle las etapas del proceso de elaboración de la lista.
+
+### 1. Lista inicial
+La [lista inicial](data/raw/Reptiles_Anfibios2022.xlsx) contiene 216 especies de anfibios de Costa Rica y fue recopilada en el contexto del proyecto Biodiversidad en cifras [@bermudez_rojas_tania_biodiversidad_2021]. El documento fue facilitado en formato XLSX (Microsoft Excel).
+
+### 2. Lista intermedia
+Se removieron de la lista inicial aquellas filas que no corresponden a datos (ej. título, autor, fecha, etc.) y el resultado se guardó en formato CSV, como una [lista intermedia](data/interim/anfibios_2022.csv). De esta manera, se obtuvo un conjunto de datos debidamente estructurado, con una fila por cada especie y una columna por cada elemento de datos.
+
+### 3. Lista final
+La lista intermedia generada en el paso anterior se utilizó como entrada del programa [generar-lista-taxonomica.R](src/generar-lista.R), el cual, en resumen, ejecuta las siguientes tareas:
+
+- "Limpia" la columna `especie` al remover espacios en blanco innecesarios, caracteres especiales (i.e. no alfanuméricos) y palabras siguientes a la segunda (ej. autores), de manera que se conserven solamente las dos primeras palabras: género y epíteto específico (ej. *Caiman crocodilus*). El resultado se guarda en una nueva columna llamada `name`.
+
+- Busca los nombres científicos de la columna `name` en la lista de referencia taxonómica de GBIF y para cada uno se recuperan elementos de datos del DwC como:
+
+    - Nombre científico (género + epíteto específico + autores).
+    - Niveles taxonómicos (reino, clase, ..., familia, género, especie).
+    - Estado (aceptado, sinónimo).
+    - Exactitud de la búsqueda (exacta, difusa).
+    - Nivel de confianza de la búsqueda (0...99).
+
+La [lista final](data/processed/lista-taxonomica-referencia-anfibios.csv) consta de los 216 nombres de especies de la lista original, revisados y corregidos, junto con los restantes elementos de datos recuperados de la lista de referencia taxonómica de GBIF.
+
+Los elementos de datos (i.e. columnas) de la lista final están definidos de acuerdo con el [Darwin Core (DwC)](https://www.tdwg.org/standards/dwc/), un estándar orientado a facilitar la publicación e integración de datos de biodiversidad, el cual incluye un glosario de términos comúnmente utilizados en listas de especies, registros de colecciones biológicas, observaciones de ciencia ciudadana y eventos de monitoreo, entre otras fuentes [@wieczorek_darwin_2012]. La lista se empaquetó y distribuyó en formato Darwin Core Archive (DwC-A), un archivo comprimido tipo ZIP que contiene archivos de datos en formato CSV y descriptores en formato XML. El DwC-A es el formato preferido para la publicación de datos en GBIF y otras plataformas de integración.
+
+
+# Visualización de los datos
+En esta sección, se presentan algunas visualizaciones de las especies de la lista y de sus registros de presencia. Estos últimos fueron recuperados del portal de datos de GBIF.
+
+## Especies
+
+### Lista final e indicadores de la búsqueda de nombres
+La siguiente tabla muestra las `r checklist_n` especies de la lista final, junto con el nombre de cada especie en la lista inicial y las columnas correspondientes a exactitud y nivel de confianza de la búsqueda. 
+
+```{r}
+#| label: checklist-curation-table
+#| echo: false
+
+checklist |>
+  select(order, family, species, verbatim_name, status, matchType, confidence) |>
+  arrange(order, family, species) |>
+  datatable(
+    colnames = c("Orden", "Familia", "Especie", "Especie (inicial)", "Estado", "Exactitud", "Confianza"),
+    options = list(
+      pageLength = 5,
+      language = list(url = '//cdn.datatables.net/plug-ins/1.10.11/i18n/Spanish.json')
+    ),
+    rownames= FALSE
+  )
+```
+
+
+### Diferencias entre la lista inicial y la lista final
+La siguiente tabla muestra las especies en las que hay alguna diferencia entre el nombre proporcionado en la lista inicial y el resultante en la lista final. Las diferencias se deben principalmente al uso de sinónimos y a errores ortográficos.
+
+```{r}
+#| label: checklist-differences-table
+#| echo: false
+
+checklist |>
+  filter(species != verbatim_name) |>
+  select(order, family, species, verbatim_name, status, matchType, confidence) |>
+  arrange(order, family, species) |>
+  datatable(
+    colnames = c("Orden", "Familia", "Especie", "Especie (inicial)", "Estado", "Exactitud", "Confianza"),
+    options = list(
+      pageLength = 5,
+      language = list(url = '//cdn.datatables.net/plug-ins/1.10.11/i18n/Spanish.json')
+    ),
+    rownames= FALSE
+  )
+```
+
+### Cantidad de especies por orden y familia
+
+```{r}
+#| label: checklist_plot_bar_order_family
+#| echo: false
+
+checklist_plot_bar_order_family <-
+  checklist |>
+  ggplot(aes(x = fct_infreq(order), fill = family)) +
+  geom_bar() +
+  xlab("Orden") +
+  ylab("Especies") +
+  scale_x_discrete(guide = "none") +
+  theme_classic() +
+  theme(axis.text.x = element_text(
+    angle = 50,
+    vjust = 1,
+    hjust = 1
+  ),
+  legend.position = "none")
+
+# Gráfico de barras plotly
+ggplotly(checklist_plot_bar_order_family) |>
+  config(locale = 'es')
+```
+
+## Registros de presencia
+Para tener un idea de los datos de presencia disponibles para las especies de la lista, se realizó una [consulta](https://https://doi.org/10.15468/dl.rn97yg) al Portal de datos de GBIF. Se encontraron `r nrow(occurrences_checklist)` registros de `r occurrences_checklist |> st_drop_geometry() |> select(species) |> n_distinct()` especies.
+
+### Cantidad de registros de presencia por especie
+```{r}
+#| label: occurrences-checklist-table
+#| echo: false
+#| message: false
+
+occurrences_checklist_groupedby_species <-
+  occurrences_checklist |>
+  st_drop_geometry() |>
+  group_by(order, family, genus, species) |>
+  summarise(n = n())
+
+occurrences_checklist_groupedby_species <-
+  checklist |>
+  select(order, family, genus, species) |>
+  left_join(occurrences_checklist_groupedby_species, c("order", "family", "genus", "species")) |>
+  mutate(n = ifelse(is.na(n), 0, n))
+
+occurrences_checklist_groupedby_species |>
+  arrange(-n) |>
+  datatable(
+    colnames = c("Orden", "Familia", "Género", "Especie", "Registros"),
+    options = list(
+      pageLength = 5,
+      language = list(url = '//cdn.datatables.net/plug-ins/1.10.11/i18n/Spanish.json')
+    ),
+    rownames= FALSE
+  )
+```
+
+### Especies en GBIF reportadas en Costa Rica y ausentes en la lista de referencia
+Se realizó otra [consulta](https://doi.org/10.15468/dl.wndm84) al Portal de datos de GBIF, de todos los registros de presencia de la clase *Amphibia* (todas las especies, no solo las de la lista de referencia), la cual retornó `r nrow(occurrences_amphibians)` registros de `r occurrences_amphibians |> st_drop_geometry() |> select(species) |> n_distinct()` especies.
+
+Las siguientes son las especies que retornó la consulta y no están en la lista de referencia.
+
+```{r}
+#| label: occurrences-mammalia-table
+#| echo: false
+#| message: false
+
+occurrences_amphibians_groupedby_species <-
+  occurrences_amphibians |>
+  st_drop_geometry() |>
+  filter(species != "") |>
+  group_by(order, family, genus, species) |>
+  summarise(n = n())
+
+occurrences_amphibians_groupedby_species <-
+  occurrences_amphibians_groupedby_species |>
+  anti_join(select(checklist, order, family, genus, species), "species")
+  
+occurrences_amphibians_groupedby_species |>
+  arrange(-n) |>
+  datatable(
+    colnames = c("Orden", "Familia", "Género", "Especie", "Registros"),
+    options = list(
+      pageLength = 5,
+      language = list(url = '//cdn.datatables.net/plug-ins/1.10.11/i18n/Spanish.json')
+    ),
+    rownames= FALSE
+  )
+```
+
+
+### Mapa de distribución
+El siguiente mapa muestra la distribución geográfica de los registros de presencia de las `r nrow(occurrences_checklist)` especies de la lista de referencia. Se incluyó una capa para cada uno de los órdenes taxonómicos, las cuales pueden activarse y desactivarse con el control de capas. Al hacer sobre cada punto, pueden observarse algunos elementos de datos del registro de presencia correspondiente.
+
+```{r}
+#| label: occurrences-map
+#| echo: false
+#| message: false
+
+# Vector of colors for taxonomic orders
+colors <- c("red", "blue", "green", "purple", "orange", "yellow", "brown", "pink", "gray", "turquoise", "magenta", "olive", "maroon")
+
+# Create leaflet map with base tiles
+m <- leaflet() %>% addTiles()
+
+# Loop through unique categories (orders) and add circle marker layer for each one
+i = 1
+for (cat in unique(occurrences_checklist$order)) {
+  # Subset data for current category
+  cat_data <-
+    occurrences_checklist[occurrences_checklist$order == cat, ]
+  # Add circle marker layer for current category
+  m <- m %>% addCircleMarkers(
+    data = cat_data,
+    radius = 1,
+    group = cat,
+    popup = paste(
+      paste0("<strong>Especie: </strong>", cat_data$species),
+      paste0("<strong>Localidad: </strong>", cat_data$locality),
+      paste0("<strong>Fecha: </strong>", cat_data$eventDate),
+      paste0("<strong>Fuente: </strong>", cat_data$institutionCode),
+      paste0("<a href='", cat_data$occurrenceID, "'>Más información</a>"),
+      sep = '<br/>'
+    ),
+    color = colors[i]
+  )
+  
+  i = i + 1
+}
+
+# Add layers control to map
+m <-
+  m %>% addLayersControl(
+    baseGroups = c("OpenStreetMap"),
+    overlayGroups = unique(occurrences_checklist$order),
+    options = layersControlOptions(collapsed = FALSE)
+  )
+
+m <- m %>% hideGroup(
+  c(
+    "Anura",
+    "Caudata",
+    "Gymnophiona"
+  )
+)
+
+m
+```
+
+# Referencias
+
+::: {#refs}
+:::
