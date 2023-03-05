@@ -1,5 +1,9 @@
 ---
 title: "Lista taxonómica de referencia de anfibios de Costa Rica"
+subtitle: "BiodataCR: plataforma para la gestión del conocimiento y la información sobre la biodiversidad de Costa Rica"
+lang: es
+date: 2023-03-04
+date-format: long
 bibliography: bib/referencias.bib
 csl: bib/apa-6th-edition.csl
 theme: litera
@@ -103,7 +107,7 @@ n_checklist <- nrow(checklist)
 ```
 
 # Introducción
-La **lista taxonómica de referencia de `r HIGHERTAXONOMICGROUP_VERNACULAR` (clase _`r HIGHERTAXONOMICGROUP_SCIENTIFIC`_) de Costa Rica** de [BIODATACR](http://biodiversidad.go.cr/) permite integrar datos de diferentes publicadores en el sistema e implementar controles de calidad en aspectos como ortografía de los nombres científicos, sinonimia, nombres de autores y clasificación taxonómica, entre otros.
+La **lista taxonómica de referencia de `r HIGHERTAXONOMICGROUP_VERNACULAR` (clase _`r HIGHERTAXONOMICGROUP_SCIENTIFIC`_) de Costa Rica** de [BiodataCR](http://biodiversidad.go.cr/) permite integrar datos de diferentes publicadores en el sistema e implementar controles de calidad en aspectos como ortografía de los nombres científicos, sinonimia, nombres de autores y clasificación taxonómica, entre otros.
 
 La siguiente tabla muestra las **`r n_checklist` especies** de la lista. La columna `Estado` indica si el nombre científico es aceptado o un sinónimo. Con los controles de la tabla, puede modificar la cantidad de especies desplegadas, ordenar los datos y realizar búsquedas. 
 
