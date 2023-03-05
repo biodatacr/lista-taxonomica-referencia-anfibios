@@ -28,6 +28,8 @@ library(ggplot2)
 library(plotly)
 library(sf)
 library(leaflet)
+library(leaflet.extras)
+library(leafem)
 library(RColorBrewer)
 ```
 
@@ -319,12 +321,13 @@ occurrences_higherrank_groupedby_species |>
 ```
 
 ### Mapa de distribución
-El siguiente mapa muestra la distribución geográfica de los registros de presencia de las `r n_checklist` especies de la lista de referencia. Se incluyó una capa para cada uno de los órdenes taxonómicos, las cuales pueden activarse y desactivarse con el control de capas. Al hacer clic sobre cada punto, pueden observarse algunos elementos de datos del registro de presencia correspondiente.
+El siguiente mapa muestra la distribución geográfica de los registros de presencia de las especies de la lista de referencia (puede que algunas no tengan registros). Se incluyó una capa para cada uno de los órdenes taxonómicos, las cuales pueden activarse y desactivarse con el control de capas. Al hacer clic sobre cada punto, pueden observarse algunos elementos de datos del registro de presencia correspondiente.
 
 ```{r}
 #| label: occurrences-map
 #| echo: false
 #| message: false
+#| warning: false
 
 # Vector of colors for taxonomic orders
 # NOTE: colors are not visible if markerClusterOptions() is used
@@ -333,7 +336,12 @@ n <- n_distinct(occurrences_checklist$order)
 colors <- brewer.pal(n = n, name = "Set1")
 
 # Leaflet map with base tiles
-map <- leaflet() %>% addTiles()
+map <- 
+  leaflet() |> 
+  addProviderTiles(providers$OpenStreetMap.Mapnik, group = "OpenStreetMap") |>
+  addProviderTiles(providers$CartoDB.DarkMatter, group = "CartoDB Dark Matter") |>
+  addProviderTiles(providers$Stamen.TonerLite, group = "Stamen Toner Lite") |>   
+  addProviderTiles(providers$Esri.WorldImagery, group = "ESRI World Imagery")
 
 # Loop through unique taxons (orders, families) 
 # and add a circle marker layer for each one
@@ -354,7 +362,7 @@ for (taxon in unique(occurrences_checklist$order)) {
       paste0("<a href='", taxon_data$occurrenceID, "'>Más información</a>"),
       sep = '<br/>'
     ),
-    color = colors[i],
+    # color = colors[i],
     clusterOptions = markerClusterOptions()
   )
   
@@ -364,10 +372,21 @@ for (taxon in unique(occurrences_checklist$order)) {
 # Add layers control to map
 map <-
   map |> addLayersControl(
-    baseGroups = c("OpenStreetMap"),
+    baseGroups = c(
+      "OpenStreetMap",
+      "CartoDB Dark Matter",
+      "Stamen Toner Lite",
+      "ESRI World Imagery"
+    ),
     overlayGroups = unique(occurrences_checklist$order),
     options = layersControlOptions(collapsed = FALSE)
-  )
+  ) |>
+  addScaleBar(position = "bottomleft",
+              options = scaleBarOptions(imperial = FALSE)) |>
+  addMouseCoordinates() |>
+  addSearchOSM() |>
+  addResetMapButton() |>
+  addFullscreenControl()
 
 map
 ```
