@@ -2,7 +2,7 @@
 title: "Lista taxonómica de referencia de anfibios de Costa Rica"
 subtitle: "BiodataCR: plataforma para la gestión del conocimiento y la información sobre la biodiversidad de Costa Rica"
 lang: es
-date: 2023-03-04
+date: today
 date-format: long
 bibliography: bib/referencias.bib
 csl: bib/apa-6th-edition.csl
